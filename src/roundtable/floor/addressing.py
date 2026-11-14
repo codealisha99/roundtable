@@ -42,12 +42,16 @@ def words(text: str) -> list[str]:
 _DETERMINERS = (
     "the|a|an|our|this|that|my|your|his|her|their|its|these|those|every|each|any|some"
 )
-_OPENERS = frozenset({"hey", "hi", "hello", "thanks", "thank", "you", "ok", "okay", "so", "yo"})
+_OPENERS = frozenset(
+    {"hey", "hi", "hello", "thanks", "thank", "you", "ok", "okay", "so", "yo"}
+)
 
 
 def _name_pattern(alias_words: list[str]) -> re.Pattern[str]:
     name = r"\s+".join(re.escape(w) for w in alias_words)
-    return re.compile(rf"(?<![\w'])(?:({_DETERMINERS})\s+)?{name}(?![\w'])", re.IGNORECASE)
+    return re.compile(
+        rf"(?<![\w'])(?:({_DETERMINERS})\s+)?{name}(?![\w'])", re.IGNORECASE
+    )
 
 
 def _is_vocative(text: str, match: re.Match[str]) -> bool:
