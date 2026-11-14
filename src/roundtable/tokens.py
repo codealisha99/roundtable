@@ -9,7 +9,7 @@ from livekit import api
 
 from roundtable.config import Settings
 
-ROOM_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
+ROOM_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")
 NAME_MAX = 40
 
 
@@ -20,7 +20,7 @@ class TokenRequestError(ValueError):
 def validate_request(name: object, room: object) -> tuple[str, str]:
     if not isinstance(name, str) or not name.strip() or len(name.strip()) > NAME_MAX:
         raise TokenRequestError(f"name must be 1-{NAME_MAX} characters")
-    if not isinstance(room, str) or not ROOM_RE.match(room):
+    if not isinstance(room, str) or not ROOM_RE.fullmatch(room):
         raise TokenRequestError("room must be 1-40 lowercase letters, digits or dashes")
     return name.strip(), room
 

@@ -162,6 +162,7 @@ def test_validate_request_rejects_bad_input():
         ("", "roundtable"),
         ("x" * 41, "roundtable"),
         ("Priya", "Bad Room!"),
+        ("Priya", "abc\n"),  # `$` in re.match also matches before a trailing newline
         (None, "roundtable"),
     ]:
         try:
