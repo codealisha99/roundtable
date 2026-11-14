@@ -286,3 +286,38 @@ def test_transcript_stays_time_ordered_when_stt_finishes_out_of_order():
         ],
     )
     assert [u.text for u in state.recent] == ["Earlier line", "Later line"]
+
+
+# --- addressed lines are not lost to later chatter ------------------------------
+
+
+def test_addressed_question_is_not_hidden_by_a_filler_from_someone_else():
+    state = play(
+        fresh(),
+        [
+            start("Dan", 0),
+            say("Dan", "Roundtable, what is the vendor status?", 0, 2000),
+            end("Dan", 2000),
+            start("Priya", 2200),
+            say("Priya", "yeah", 2200, 2500),
+            end("Priya", 2500),
+        ],
+    )
+    assert evaluate(state, 3500).action == "speak"
+
+
+def test_question_asked_while_agent_was_thinking_is_still_answered():
+    state = play(
+        fresh(),
+        [
+            start("Priya", 0),
+            say("Priya", "Roundtable, what's the status?", 0, 2000),
+            end("Priya", 2000),
+            start("Dan", 3500),
+            say("Dan", "Roundtable, and the risks?", 3500, 4800),
+            end("Dan", 4800),
+        ],
+    )
+    state = apply(state, AgentStarted(at_ms=5700, text="Status is green.", answers_ms=2000))
+    state = apply(state, AgentEnded(at_ms=9000, played_text="Status is green."))
+    assert evaluate(state, 9500).action == "speak"

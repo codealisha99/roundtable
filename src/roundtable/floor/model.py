@@ -37,8 +37,11 @@ class Joined:
 
 @dataclass(frozen=True)
 class AgentStarted:
+    """`answers_ms` is the end time of the line this turn answers; None means "everything heard so far"."""
+
     at_ms: int
     text: str
+    answers_ms: int | None = None
 
 
 @dataclass(frozen=True)
@@ -76,6 +79,7 @@ class FloorState:
     last_human_end_ms: int = 0
     last_agent_start_ms: int | None = None
     last_agent_end_ms: int | None = None
+    answered_upto_ms: int = -1  # lines ending at or before this were answered by a turn
     overlap_open: bool = False
     overlap_until_ms: int = 0
     consulted_for_ms: int | None = None

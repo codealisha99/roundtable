@@ -14,7 +14,7 @@ from livekit import rtc
 
 from roundtable import respond
 from roundtable.events import EventLog
-from roundtable.floor.engine import apply, evaluate, initial_state, last_human_line
+from roundtable.floor.engine import addressed_line, apply, evaluate, initial_state
 from roundtable.floor.model import (
     Activity,
     AgentEnded,
@@ -244,7 +244,7 @@ class Roundtable:
     # --- turns ----------------------------------------------------------------
 
     async def _reply_turn(self, why: str) -> None:
-        question = last_human_line(self.state)
+        question = addressed_line(self.state)
         if question is None:
             return
         self._publish_state("thinking", why)
@@ -258,12 +258,12 @@ class Roundtable:
             summary=self._summary,
             update_delivered=self._update_delivered,
         )
-        if self._persona.mode == "standup":
+        spoken = bool(text) and await self._say(text, why, answers_ms=question.end_ms)
+        if spoken and self._persona.mode == "standup":
             self._update_delivered = True
-        if text:
-            await self._say(text, why)
 
     async def _consult_turn(self) -> None:
+        anchor = self.state.last_human_end_ms  # the statement being weighed, not later talk
         self._publish_state("thinking", "asking the LLM gate")
         raw = await self._brain.complete(
             respond.GATE_SYSTEM,
@@ -272,20 +272,20 @@ class Roundtable:
         speak, text = parse_gate(raw)
         self._events.emit("gate", speak=speak, text=text)
         if speak and text:
-            await self._say(text, "LLM gate chose to speak")
+            await self._say(text, "LLM gate chose to speak", answers_ms=anchor)
         else:
             self._publish_state("listening", "LLM gate stayed silent")
 
-    async def _say(self, text: str, why: str) -> None:
+    async def _say(self, text: str, why: str, *, answers_ms: int | None = None) -> bool:
         now = self.now_ms()
         check = evaluate(self.state, now, approved=True)
         if check.action != "speak":
             self._events.emit("turn_dropped", text=text, reason=check.reason)
             self._publish_state("listening", check.reason)
-            return
+            return False
         cancel = asyncio.Event()
         self._cancel = cancel
-        self._apply(AgentStarted(at_ms=now, text=text))
+        self._apply(AgentStarted(at_ms=now, text=text, answers_ms=answers_ms))
         self._publish_state("speaking", why)
         self._events.emit("agent_speech_start", text=text, why=why)
         self._publish({"kind": "agent_caption", "text": text})
@@ -306,6 +306,7 @@ class Roundtable:
         self._publish_state(
             "listening", "stopped speaking" if interrupted else "finished speaking"
         )
+        return True
 
     # --- reporting ------------------------------------------------------------
 

@@ -57,11 +57,13 @@ def apply(state: FloorState, event: object) -> FloorState:
         case Activity():
             return _on_activity(state, event)
         case AgentStarted():
+            answered = event.at_ms if event.answers_ms is None else event.answers_ms
             return replace(
                 state,
                 agent_speaking=True,
                 agent_started_ms=event.at_ms,
                 last_agent_start_ms=event.at_ms,
+                answered_upto_ms=max(state.answered_upto_ms, answered),
             )
         case AgentEnded():
             return _on_agent_ended(state, event)
@@ -208,15 +210,25 @@ def _is_follow_up(state: FloorState, line: Utterance, now_ms: int) -> bool:
     return is_question(line.text) or mentions_you(line.text)
 
 
+def addressed_line(state: FloorState) -> Utterance | None:
+    """The newest unanswered line addressed to me, else the newest human line.
+
+    A filler ("yeah") after a question must not hide the question, so the address wins.
+    """
+    for line in reversed(state.recent):
+        if line.speaker == state.agent_name or line.end_ms <= state.answered_upto_ms:
+            continue
+        if addresses_agent(line.text, state.aliases):
+            return line
+    return last_human_line(state)
+
+
 def _plan(state: FloorState, now_ms: int) -> Verdict:
-    line = last_human_line(state)
+    line = addressed_line(state)
     if line is None:
         return Verdict("wait", "nothing said yet", "listening")
     gap = now_ms - state.last_human_end_ms
-    answered = (
-        state.last_agent_start_ms is not None
-        and state.last_agent_start_ms >= line.end_ms
-    )
+    answered = state.answered_upto_ms >= line.end_ms
 
     if addresses_agent(line.text, state.aliases) and not answered:
         if gap < GAP_MS:
