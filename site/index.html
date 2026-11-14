@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Roundtable: a voice agent that waits for its turn</title>
+    <meta
+      name="description"
+      content="Roundtable is a voice agent that joins a multi-person LiveKit call, tracks who said what, waits for a real gap, and logs why it spoke or stayed quiet. Recorded run, architecture and quickstart."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Roundtable: a voice agent that waits for its turn" />
+    <meta
+      property="og:description"
+      content="A voice agent for multi-person calls. Recorded replay of the real end-to-end demo, with the decision log."
+    />
+    <meta property="og:url" content="https://roundtable-site-pi.vercel.app/" />
+    <meta name="twitter:card" content="summary" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23132019'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23f2b441'/%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Hanken+Grotesk:wght@400;500;600&display=swap"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#replay">Skip to the recorded run</a>
+
+    <header class="top">
+      <a class="word" href="#top" aria-label="Roundtable, top of page">Roundtable</a>
+      <nav aria-label="Sections">
+        <a href="#replay">Replay</a>
+        <a href="#floor">Turn-taking</a>
+        <a href="#run">Run it</a>
+        <a href="https://github.com/codealisha99/roundtable">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <h1>A voice agent that waits for its turn.</h1>
+        <p class="lede">
+          Roundtable joins a multi-person LiveKit call as one participant. It tracks who said what,
+          decides whether a line is meant for it, waits for a real gap, and stops the moment someone
+          talks over it. Every choice it makes is logged with the reason.
+        </p>
+        <div class="actions">
+          <a class="btn primary" href="#replay">Watch the recorded run</a>
+          <a class="btn" href="#run">Run it locally</a>
+        </div>
+        <p class="notice">
+          <strong>No live demo is hosted.</strong> A hosted version needs a LiveKit server, a CPU-heavy
+          speech-to-text and text-to-speech agent, and an LLM key. None of that is deployed here. The
+          replay below is one real run of the end-to-end demo on a laptop, with synthetic speakers and a
+          scripted LLM.
+        </p>
+      </section>
+
+      <section id="replay" class="replay" aria-labelledby="replay-title">
+        <div class="section-head">
+          <h2 id="replay-title">The recorded run</h2>
+          <p>
+            Three simulated speakers join a LiveKit room. Their speech is macOS synthesised voices, sent in
+            real time. The agent is the real Python process with the real voice activity detector, speech
+            recogniser and floor manager. Its brain is a scripted LLM. The audio is the room mix: each
+            speaker's microphone plus the agent's voice as a listener received it.
+          </p>
+          <p class="label">Recording of an automated run. Synthetic speakers, scripted LLM, not a live call.</p>
+        </div>
+
+        <div class="player" data-player>
+          <div class="tabs" role="tablist" aria-label="Scenario">
+            <button role="tab" id="tab-assistant" aria-selected="true" aria-controls="player-body" data-scenario="assistant">
+              Assistant in a call
+            </button>
+            <button role="tab" id="tab-standup" aria-selected="false" aria-controls="player-body" data-scenario="standup" tabindex="-1">
+              Standup for an absent colleague
+            </button>
+          </div>
+
+          <div id="player-body" class="player-body" role="tabpanel" aria-labelledby="tab-assistant">
+            <div class="stage" data-stage aria-label="Participants. The ring marks who is speaking.">
+              <div class="table-disc" aria-hidden="true"></div>
+              <div class="tiles" data-tiles></div>
+            </div>
+
+            <aside class="feed" aria-label="Decision feed">
+              <h3>Why it spoke, and why it stayed quiet</h3>
+              <ol data-feed class="feed-list"></ol>
+            </aside>
+          </div>
+
+          <div class="captions" aria-live="polite" data-captions></div>
+
+          <div class="transport">
+            <button class="play" type="button" data-play aria-label="Play">Play</button>
+            <input type="range" min="0" max="1000" value="0" step="1" data-seek aria-label="Position in the run" />
+            <span class="clock" data-clock>00:00 / 00:00</span>
+          </div>
+          <p class="fine" data-fallback hidden>Audio did not load. The timeline still works without sound.</p>
+          <audio preload="metadata" data-audio></audio>
+        </div>
+
+        <div class="checks">
+          <h3 data-checks-title>Checks from this run</h3>
+          <table>
+            <thead>
+              <tr><th scope="col">Result</th><th scope="col">Check</th><th scope="col">Evidence from the log</th></tr>
+            </thead>
+            <tbody data-checks></tbody>
+          </table>
+          <p class="fine">
+            Reproduce with <code>make demo</code>. The run writes these checks, the timeline and the audio
+            from the agent's own event log and the captured audio.
+          </p>
+        </div>
+      </section>
+
+      <section id="floor" class="floor" aria-labelledby="floor-title">
+        <div class="section-head">
+          <h2 id="floor-title">Deciding when to talk</h2>
+          <p>
+            The floor manager is a pure state machine with no LiveKit imports. <code>apply</code> folds
+            transcript and voice-activity events into state. <code>evaluate</code> returns one of four
+            verdicts (wait, speak, stop, consult), and each carries the reason the replay shows. Because it is
+            pure, every rule is tested against scripted timelines in milliseconds.
+          </p>
+        </div>
+
+        <figure class="diagram">
+          <svg viewBox="0 0 760 400" role="img" aria-labelledby="fsm-title fsm-desc">
+            <title id="fsm-title">Floor manager states</title>
+            <desc id="fsm-desc">
+              Listening moves to Wants to speak when someone addresses the agent, then to Speaking once a 700 ms gap has passed.
+              Listening moves to Asking the LLM gate on an unanswered decision-relevant remark after 2 s of quiet. A gate yes
+              moves to Speaking, a no stays Listening. Speaking returns to Listening when the turn ends, or moves to Cooling
+              down when a person talks over it for 250 ms, which stops playback. Cooling down returns to Listening after 1.2 s.
+            </desc>
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="#8fa79c" />
+              </marker>
+              <marker id="arrow-hot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="#f2b441" />
+              </marker>
+            </defs>
+            <g fill="none" stroke="#8fa79c" stroke-width="1.6" marker-end="url(#arrow)">
+              <path d="M205 157 C 225 110, 250 80, 280 74" />
+              <path d="M480 74 C 560 78, 600 110, 600 157" stroke="#f2b441" marker-end="url(#arrow-hot)" />
+              <path d="M530 190 L 230 190" />
+              <path d="M180 223 C 190 255, 210 280, 224 300" />
+              <path d="M232 300 C 222 270, 214 240, 210 223" stroke-dasharray="4 5" />
+              <path d="M350 318 C 430 300, 500 260, 530 212" stroke="#f2b441" marker-end="url(#arrow-hot)" />
+              <path d="M600 223 C 600 250, 592 275, 590 300" stroke="#f2b441" marker-end="url(#arrow-hot)" />
+              <path d="M590 362 C 590 392, 160 392, 160 224" />
+            </g>
+            <g>
+              <rect x="90" y="157" width="140" height="66" rx="33" fill="#1d3029" stroke="#f2b441" stroke-width="2" />
+              <rect x="280" y="40" width="200" height="66" rx="33" fill="#1d3029" stroke="#8fa79c" />
+              <rect x="530" y="157" width="140" height="66" rx="33" fill="#f2b441" />
+              <rect x="170" y="300" width="180" height="62" rx="31" fill="#1d3029" stroke="#8fa79c" />
+              <rect x="520" y="300" width="140" height="62" rx="31" fill="#1d3029" stroke="#8fa79c" />
+            </g>
+            <g font-family="Hanken Grotesk, sans-serif" font-size="15" text-anchor="middle">
+              <text x="160" y="196" fill="#eef0e6" font-weight="600">Listening</text>
+              <text x="380" y="68" fill="#eef0e6" font-weight="600">Wants to speak</text>
+              <text x="380" y="90" fill="#9fb1a7" font-size="12.5">addressed, waiting for a gap</text>
+              <text x="600" y="196" fill="#13201b" font-weight="600">Speaking</text>
+              <text x="260" y="326" fill="#eef0e6" font-weight="600">Asking the LLM gate</text>
+              <text x="260" y="346" fill="#9fb1a7" font-size="12.5">yes: speak. no: stay listening</text>
+              <text x="590" y="336" fill="#eef0e6" font-weight="600">Cooling down</text>
+            </g>
+            <g font-family="Hanken Grotesk, sans-serif" font-size="12.5" fill="#c9d4cd">
+              <text x="40" y="112" text-anchor="start">someone addresses me</text>
+              <text x="494" y="58" text-anchor="start" fill="#f2b441">700 ms gap</text>
+              <text x="380" y="182" text-anchor="middle">turn ends</text>
+              <text x="166" y="258" text-anchor="end">unanswered remark,</text>
+              <text x="166" y="274" text-anchor="end">2 s quiet</text>
+              <text x="400" y="266" text-anchor="end" fill="#f2b441">gate says yes</text>
+              <text x="612" y="262" text-anchor="start" fill="#f2b441">talked over me,</text>
+              <text x="612" y="278" text-anchor="start" fill="#f2b441">250 ms: stop</text>
+              <text x="375" y="382" text-anchor="middle">1.2 s quiet</text>
+            </g>
+          </svg>
+          <figcaption>
+            Every transition is an <code>evaluate</code> verdict with a reason string. Amber marks the two
+            paths that come from outside the floor rules: the LLM gate saying yes, and a person talking over
+            the agent. A gate "yes" is re-checked against the floor before any audio plays.
+          </figcaption>
+        </figure>
+
+        <dl class="rules">
+          <div><dt>700 ms</dt><dd>gap after someone addresses the agent, before it answers</dd></div>
+          <div><dt>1.5 s</dt><dd>silence after an unanswered group question before it answers</dd></div>
+          <div><dt>250 ms</dt><dd>of speech over the agent that stops playback at once</dd></div>
+          <div><dt>1.2 s</dt><dd>quiet after an overlap before it starts again</dd></div>
+          <div><dt>2 s, 20 s</dt><dd>silence before asking the LLM gate, and at most one gate call per 20 s</dd></div>
+        </dl>
+
+        <p class="prose">
+          Addressing needs no model. The agent's name counts when it is used bare, or as
+          <code>@name</code>. After "the", "a" or "our" it is a noun ("let's take it to the roundtable"),
+          unless the line opens with it and a comma follows. A participant's name counts as addressed only
+          when a line opens with it.
+          Three alternating turns between two people count as a back-and-forth, so the agent backs off
+          from questions that are not its own.
+        </p>
+        <p class="prose">
+          Standup proxy mode is the second recorded scenario. It answers to an absent colleague's name,
+          delivers the prepared update once, answers follow-ups only from the notes, and says it will take
+          anything else back to them.
+        </p>
+      </section>
+
+      <section class="arch" aria-labelledby="arch-title">
+        <div class="section-head">
+          <h2 id="arch-title">How the pieces connect</h2>
+          <p>Each person gets their own audio track, voice detector and transcription task, so a slow transcription never delays a barge-in.</p>
+        </div>
+        <figure class="diagram">
+          <svg viewBox="0 0 720 300" role="img" aria-labelledby="arch-t arch-d">
+            <title id="arch-t">Architecture</title>
+            <desc id="arch-d">
+              Browser and simulated speakers join a LiveKit room over WebRTC. The agent subscribes to each speaker's
+              track, runs voice activity and speech-to-text per speaker, feeds utterances and speech edges to the
+              floor manager, consults an LLM gate for ambiguous silences, generates replies, synthesises speech and
+              plays it paced back into the room. A token API mints join tokens for browsers.
+            </desc>
+            <defs>
+              <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                <path d="M0 0 L10 5 L0 10 z" fill="#8fa79c" />
+              </marker>
+            </defs>
+            <g fill="#1d3029" stroke="#3c5249">
+              <rect x="20" y="30" width="150" height="56" rx="10" />
+              <rect x="20" y="210" width="150" height="56" rx="10" />
+              <rect x="250" y="110" width="150" height="80" rx="10" fill="#132019" stroke="#8fa79c" />
+              <rect x="470" y="20" width="230" height="250" rx="14" fill="#101b16" stroke="#2c3f37" />
+              <rect x="490" y="44" width="190" height="40" rx="8" />
+              <rect x="490" y="98" width="190" height="40" rx="8" />
+              <rect x="490" y="152" width="190" height="40" rx="8" />
+              <rect x="490" y="206" width="190" height="40" rx="8" fill="#2a2412" stroke="#f2b441" />
+            </g>
+            <g font-family="Hanken Grotesk, sans-serif" font-size="13" fill="#eef0e6" text-anchor="middle">
+              <text x="95" y="53" font-weight="600">Browser client</text>
+              <text x="95" y="71" font-size="11" fill="#9fb1a7">React, livekit-client</text>
+              <text x="95" y="233" font-weight="600">Simulated speakers</text>
+              <text x="95" y="251" font-size="11" fill="#9fb1a7">real clients, synthesised speech</text>
+              <text x="325" y="140" font-weight="600">LiveKit room</text>
+              <text x="325" y="160" font-size="11" fill="#9fb1a7">WebRTC audio, data topic</text>
+              <text x="325" y="177" font-size="11" fill="#9fb1a7">dev server in Docker</text>
+              <text x="585" y="36" font-size="11" fill="#9fb1a7">roundtable agent (Python)</text>
+              <text x="585" y="68" font-size="12">per-speaker VAD and STT</text>
+              <text x="585" y="122" font-size="12">floor manager (pure)</text>
+              <text x="585" y="176" font-size="12">LLM gate and reply</text>
+              <text x="585" y="230" font-size="12">TTS and paced playback</text>
+            </g>
+            <g fill="none" stroke="#8fa79c" stroke-width="1.5" marker-end="url(#a2)">
+              <path d="M170 58 L250 130" />
+              <path d="M170 238 L250 170" />
+              <path d="M400 150 L490 226" />
+              <path d="M490 118 L400 140" />
+              <path d="M490 64 L400 124" stroke-dasharray="4 4" />
+              <path d="M400 118 L490 172" stroke-dasharray="4 4" />
+            </g>
+            <text x="95" y="130" font-family="Hanken Grotesk, sans-serif" font-size="11" fill="#9fb1a7" text-anchor="middle">token API, POST /api/token</text>
+          </svg>
+          <figcaption>
+            Solid arrows carry audio. Dashed arrows carry speech state and captions back to the browser.
+            The token API is a separate small process that mints join tokens so secrets stay server-side.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section id="run" class="run" aria-labelledby="run-title">
+        <div class="section-head">
+          <h2 id="run-title">Run it locally</h2>
+          <p>
+            One command starts LiveKit in Docker, joins three synthesised speakers and asserts the agent's
+            behaviour from its own log. It needs macOS (for <code>say</code>), Docker, uv and pnpm.
+          </p>
+        </div>
+        <pre class="code"><code>make install          # uv sync + pnpm install
+make test             # 41 unit tests: floor timelines, meeting memory, prompts, token API
+make demo             # keyless end-to-end run; prints the transcript, decisions and checks</code></pre>
+        <p class="prose">
+          No keys are needed. The demo pins a scripted LLM and local speech models, so it never reaches a
+          cloud provider. The LiveKit key and secret in the defaults are the <code>livekit-server --dev</code>
+          pair. They are for local development only. Production needs real keys and a real secret.
+        </p>
+      </section>
+
+      <section class="limits" aria-labelledby="limits-title">
+        <div class="section-head">
+          <h2 id="limits-title">Limits</h2>
+        </div>
+        <ul>
+          <li>Captions appear after a speaker pauses, not word by word. Streaming speech-to-text would help.</li>
+          <li>Speaker-level echo is not suppressed. If a microphone hears the agent's speakers, it can barge in on itself. Headphones are the reliable fix.</li>
+          <li>A bare name mid-sentence still counts ("I think roundtable is good" addresses it). Only determiner-led uses are excluded.</li>
+          <li>Speaker identity is the display name, so two people with the same name merge.</li>
+          <li>Thresholds were tuned on one scripted meeting, not measured on real ones.</li>
+          <li>The Anthropic and OpenAI-compatible LLM paths and the cloud speech adapters are not exercised. They have no keys here.</li>
+          <li>The demo's simulated speakers use macOS <code>say</code>. The agent itself runs anywhere.</li>
+        </ul>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <p>
+        Roundtable, MIT licensed. <a href="https://github.com/codealisha99/roundtable">Source and README</a>.
+        The replay is a recording of an automated run, not a live call.
+      </p>
+    </footer>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>
