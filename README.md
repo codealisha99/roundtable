@@ -10,6 +10,8 @@ The hard part is multi-party turn-taking, not the 1:1 voice loop. Most voice age
 
 **Live demo:** none hosted. A hosted version needs a LiveKit server, a CPU-heavy speech-to-text and text-to-speech agent, and an LLM key, so none is deployed. Run it locally below. The recorded run is on the landing page above.
 
+![The recorded run: participant ring, decision log and timeline](docs/replay.png)
+
 The landing page source is in [site/](site/). Its recording comes from `make demo` followed by `make replay`.
 
 **Keyless demo:** `make install && make demo` runs LiveKit in Docker, runs two scenarios (an assistant in a three-person call, and a standup proxy for an absent colleague), and asserts the agent's behaviour from its own event logs.
@@ -64,7 +66,7 @@ Prerequisites: macOS (uses `say` for the simulated speakers), Docker, uv (Python
 
 ```bash
 make install          # uv sync + pnpm install
-make test             # 41 unit tests: floor timelines, meeting memory, prompts, token API
+make test             # 45 unit tests: floor timelines, meeting memory, prompts, token API
 make demo             # keyless end-to-end run, two scenarios; prints transcript, decisions, checks
 make replay           # after demo: publish the recorded run into site/replay (MP3 + timeline)
 ```
@@ -107,7 +109,7 @@ The keyless demo pins `ROUNDTABLE_LLM=scripted`, `ROUNDTABLE_STT=local`, and `RO
 
 | What | Status |
 | --- | --- |
-| Floor manager, meeting memory, prompt builders, token API (`make test`, 41 tests) | Passing |
+| Floor manager, meeting memory, prompt builders, token API (`make test`, 45 tests) | Passing |
 | Keyless end-to-end demo (`make demo`): LiveKit in Docker, two scenarios, 3 and 2 simulated speakers, 27 checks | Passing (17 + 10) |
 | Web client: loads, joins the LiveKit room with a fake microphone, shows the agent panel and the self tile (headless Chromium via Playwright) | Passing (`cd web && pnpm verify`, needs the live stack) |
 | Local providers: faster-whisper, Piper, Silero VAD | Exercised by the demo |
