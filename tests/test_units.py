@@ -206,3 +206,13 @@ def test_token_api_mints_a_join_token_and_validates_input():
     assert client.post("/api/token", json=["list"]).status_code == 400
     assert client.get("/api/health").json() == {"ok": True}
 
+
+
+def test_token_api_rejects_oversized_bodies():
+    client = TestClient(make_app(SETTINGS))
+    big = b'{"name": "' + b"x" * 5000 + b'"}'
+    assert client.post("/api/token", content=big).status_code == 413
+    streamed = (big[i : i + 512] for i in range(0, len(big), 512))  # no Content-Length
+    assert client.post("/api/token", content=streamed).status_code == 413
+    ok = client.post("/api/token", json={"name": "Priya", "room": "roundtable"})
+    assert ok.status_code == 200
