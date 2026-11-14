@@ -37,21 +37,37 @@ def words(text: str) -> list[str]:
     return _WORD.findall(text.lower())
 
 
-def _contains_phrase(haystack: list[str], phrase: list[str]) -> bool:
-    n = len(phrase)
-    return any(haystack[i : i + n] == phrase for i in range(len(haystack) - n + 1))
+# "the roundtable" is a noun, "Roundtable, ..." is a name. A determiner before the name makes it a
+# noun unless the name opens the line and is set off by a comma ("The roundtable, what now?").
+_DETERMINERS = (
+    "the|a|an|our|this|that|my|your|his|her|their|its|these|those|every|each|any|some"
+)
+_OPENERS = frozenset({"hey", "hi", "hello", "thanks", "thank", "you", "ok", "okay", "so", "yo"})
+
+
+def _name_pattern(alias_words: list[str]) -> re.Pattern[str]:
+    name = r"\s+".join(re.escape(w) for w in alias_words)
+    return re.compile(rf"(?<![\w'])(?:({_DETERMINERS})\s+)?{name}(?![\w'])", re.IGNORECASE)
+
+
+def _is_vocative(text: str, match: re.Match[str]) -> bool:
+    """A determiner-led name still counts when it opens the line and a comma follows it."""
+    opens_line = set(words(text[: match.start()])) <= _OPENERS
+    return opens_line and text[match.end() :].lstrip().startswith(",")
 
 
 def addresses_agent(text: str, aliases: Iterable[str]) -> bool:
-    """True if any alias (possibly multi-word) appears as whole words, or as @alias."""
-    tokens = words(text)
+    """True if an alias appears as a whole name (bare, or @alias, or vocative after a determiner)."""
     lowered = text.lower()
     for alias in aliases:
         alias_words = words(alias)
         if not alias_words:
             continue
-        if _contains_phrase(tokens, alias_words) or f"@{alias.lower()}" in lowered:
+        if f"@{alias.lower()}" in lowered:
             return True
+        for match in _name_pattern(alias_words).finditer(text):
+            if match.group(1) is None or _is_vocative(text, match):
+                return True
     return False
 
 

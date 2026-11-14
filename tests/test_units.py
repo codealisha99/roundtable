@@ -32,7 +32,18 @@ SETTINGS = Settings(
 def test_addresses_agent_by_alias_and_at_mention():
     assert addresses_agent("hey Round Table, status?", ("roundtable", "round table"))
     assert addresses_agent("@roundtable status", ("roundtable",))
+    assert addresses_agent("Roundtable, what did Dan say?", ("roundtable",))
+    assert addresses_agent("Dan, can you check this, roundtable?", ("roundtable",))
+    assert addresses_agent("The roundtable, what now?", ("roundtable",))
     assert not addresses_agent("the roundtables were long", ("roundtable",))
+
+
+def test_common_noun_use_of_the_name_is_not_addressing():
+    aliases = ("roundtable", "round table")
+    assert not addresses_agent("Let's take it to the roundtable.", aliases)
+    assert not addresses_agent("We should book a round table for lunch.", aliases)
+    assert not addresses_agent("The roundtable is booked for Friday.", aliases)
+    assert not addresses_agent("Let's take it to the roundtable, it is fine.", aliases)
 
 
 def test_addressed_human_checks_opening_words_only():
@@ -194,3 +205,4 @@ def test_token_api_mints_a_join_token_and_validates_input():
     assert client.post("/api/token", content=b"not json").status_code == 400
     assert client.post("/api/token", json=["list"]).status_code == 400
     assert client.get("/api/health").json() == {"ok": True}
+
