@@ -84,17 +84,54 @@ SCRIPT: tuple[Line, ...] = (
 )
 
 
+# Standup proxy scenario: Sam is absent; the agent answers to "Sam" and speaks from prepared notes.
+STANDUP_UPDATE = "Sam's update: the export fix is merged to main, and the parser PR is up for review."
+STANDUP_NOTES = """# Sam: standup notes
+
+- Export fix: merged to main on Tuesday.
+- Parser PR: up for review, Priya is the reviewer.
+- Blocked on the vendor sandbox credentials, asked Ops on Monday.
+- Out on the 27th, back on the 30th.
+"""
+
+STANDUP_SCRIPT: tuple[Line, ...] = (
+    Line("Priya", "Samantha", "Quick standup. Sam, you are up first.", delay_s=1.0),
+    Line(
+        "Dan",
+        "Daniel",
+        "Nice, that is good news for the release.",
+        after_event="agent_speech_end",
+        delay_s=1.0,
+    ),
+    Line(
+        "Priya",
+        "Samantha",
+        "Sam, is anything blocked?",
+        after_event="agent_speech_end",
+        delay_s=2.0,
+    ),
+    Line(
+        "Priya",
+        "Samantha",
+        "Sam, when does the EU rollout ship?",
+        after_event="agent_speech_end",
+        count=2,
+        delay_s=2.5,
+    ),
+)
+
+
 def clip_path(out_dir: Path, line: Line) -> Path:
     """Keyed by voice and text, so editing the script never replays a stale clip."""
     digest = hashlib.sha1(f"{line.voice}|{line.text}".encode()).hexdigest()[:10]
     return out_dir / f"{line.speaker.lower()}-{digest}.wav"
 
 
-def synthesise(out_dir: Path) -> tuple[Path, ...]:
+def synthesise(out_dir: Path, script: tuple[Line, ...] = SCRIPT) -> tuple[Path, ...]:
     """Write one 16 kHz mono WAV per scripted line (cached on re-runs)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     paths = []
-    for line in SCRIPT:
+    for line in script:
         path = clip_path(out_dir, line)
         if not path.exists():
             subprocess.run(

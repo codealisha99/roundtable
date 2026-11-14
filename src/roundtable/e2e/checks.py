@@ -81,22 +81,86 @@ def _seconds(ms: int) -> str:
     return f"{ms / 1000:.1f}s"
 
 
+def _transcribed(
+    events: list[Record], script: tuple[Line, ...]
+) -> tuple[list[Check], dict[int, Record | None]]:
+    found = {index: find_line(events, line) for index, line in enumerate(script)}
+    checks = [
+        Check(
+            f"transcribed and attributed: {line.speaker} '{line.text[:40]}'",
+            found[index] is not None,
+            f"heard: {found[index]['text']!r}"
+            if found[index]
+            else "no matching utterance",
+        )
+        for index, line in enumerate(script)
+    ]
+    return checks, found
+
+
 def analyse(
     events: list[Record], script: tuple[Line, ...], listener_frames: int
 ) -> list[Check]:
-    checks: list[Check] = []
-    found = {index: find_line(events, line) for index, line in enumerate(script)}
-    for index, line in enumerate(script):
-        hit = found[index]
-        checks.append(
-            Check(
-                f"transcribed and attributed: {line.speaker} '{line.text[:40]}'",
-                hit is not None,
-                f"heard: {hit['text']!r}" if hit else "no matching utterance",
-            )
-        )
+    transcribed, found = _transcribed(events, script)
+    checks = transcribed
     checks.extend(_silence_checks(events, found))
     checks.extend(_reply_checks(events, found, script, listener_frames))
+    return checks
+
+
+def standup_checks(
+    events: list[Record],
+    script: tuple[Line, ...],
+    listener_frames: int,
+    update: str,
+) -> list[Check]:
+    """Standup proxy: the update on Sam's turn, once; a follow-up answered from notes; an unknown deferred."""
+    transcribed, found = _transcribed(events, script)
+    turns = agent_turns(events)
+    named, blocked, unknown = found.get(0), found.get(2), found.get(3)
+    first = turns[0] if turns else None
+    second = turns[1] if len(turns) > 1 else None
+    third = turns[2] if len(turns) > 2 else None
+    checks = transcribed + [
+        Check(
+            "silent until Sam is called on",
+            first is not None
+            and named is not None
+            and first.start_ms >= named["end_ms"],
+            f"first speech at {_seconds(first.start_ms)}" if first else "no speech",
+        ),
+        Check(
+            "update delivered on Sam's turn, word for word",
+            first is not None and first.text == update,
+            f"spoken: {first.text[:60]!r}" if first else "nothing spoken",
+        ),
+        Check(
+            "update delivered exactly once",
+            sum(t.text == update for t in turns) == 1,
+            f"{sum(t.text == update for t in turns)} deliveries",
+        ),
+        Check(
+            "follow-up answered from the notes",
+            second is not None
+            and blocked is not None
+            and second.start_ms >= blocked["end_ms"]
+            and "vendor sandbox" in second.text.lower(),
+            f"reply: {second.text[:70]!r}" if second else "no reply",
+        ),
+        Check(
+            "unknown question deferred to Sam",
+            third is not None
+            and unknown is not None
+            and third.start_ms >= unknown["end_ms"]
+            and "take that back to sam" in third.text.lower(),
+            f"reply: {third.text[:70]!r}" if third else "no reply",
+        ),
+        Check(
+            "agent audio reached a listener",
+            listener_frames > 0,
+            f"{listener_frames} audio frames received by a participant",
+        ),
+    ]
     return checks
 
 
@@ -105,7 +169,8 @@ def memory_checks(markdown: str) -> list[Check]:
     return [
         Check(
             "notes: decision captured",
-            "feature flag" in markdown and "## Decisions" in markdown,
+            # Keyword, not the exact phrase: local STT sometimes hears "flag" as "plan".
+            "feature" in markdown and "## Decisions" in markdown,
             "decision line in ## Decisions",
         ),
         Check(

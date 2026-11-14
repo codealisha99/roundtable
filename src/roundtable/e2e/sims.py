@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections import deque
 
 import numpy as np
 from livekit import rtc
 
 from roundtable.config import Settings
+from roundtable.e2e.record import Recorder
 from roundtable.e2e.script import SAMPLE_RATE
 from roundtable.tokens import human_identity, mint
 
@@ -17,10 +19,22 @@ TAIL_SILENCE_S = 1.2  # long enough for the VAD to close the utterance
 
 
 class Participant:
-    def __init__(self, settings: Settings, name: str, agent_name: str) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        name: str,
+        agent_name: str,
+        recorder: Recorder,
+        *,
+        listens: bool = False,
+    ) -> None:
         self.name = name
         self._settings = settings
         self._agent_name = agent_name
+        self._recorder = recorder
+        self._listens = (
+            listens  # only the listener records what the agent plays into the room
+        )
         self._room = rtc.Room()
         self._source = rtc.AudioSource(SAMPLE_RATE, 1)
         self._queue: deque[np.ndarray] = deque()
@@ -63,7 +77,11 @@ class Participant:
         """Real-time pacing: one 10 ms frame per tick, silence when nothing is queued."""
         silence = np.zeros(FRAME, dtype=np.int16)
         while True:
-            chunk = self._queue.popleft() if self._queue else silence
+            if self._queue:
+                chunk = self._queue.popleft()
+                self._recorder.put(self.name, time.time(), chunk)
+            else:
+                chunk = silence
             await self._source.capture_frame(self._frame(chunk))
             await asyncio.sleep(0.01)
 
@@ -81,5 +99,8 @@ class Participant:
 
     async def _count_agent_audio(self, track: rtc.Track) -> None:
         stream = rtc.AudioStream(track, sample_rate=SAMPLE_RATE, num_channels=1)
-        async for _ in stream:
+        async for event in stream:
             self.agent_frames.append(1)
+            if self._listens:
+                samples = np.frombuffer(event.frame.data, dtype=np.int16)
+                self._recorder.put(self._agent_name, time.time(), samples)

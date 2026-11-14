@@ -21,9 +21,14 @@ class EventLog:
         self._t0 = time.monotonic()
         self._echo = echo
 
+    def now_ms(self) -> int:
+        """The agent's clock. Floor timings and event times share it, so they can be compared directly."""
+        return int((time.monotonic() - self._t0) * 1000)
+
     def emit(self, kind: str, **fields: Any) -> None:
-        t_ms = int((time.monotonic() - self._t0) * 1000)
-        record = {"t_ms": t_ms, "kind": kind, **fields}
+        t_ms = self.now_ms()
+        # `wall` (epoch seconds) lets the e2e recorder line events up with the captured audio.
+        record = {"t_ms": t_ms, "wall": round(time.time(), 3), "kind": kind, **fields}
         if self._file is not None:
             self._file.write(json.dumps(record, ensure_ascii=False) + "\n")
             self._file.flush()

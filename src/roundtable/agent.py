@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import time
 from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
@@ -61,7 +60,6 @@ class Roundtable:
         self._vad = vad
         self._events = events
         self._out_dir = out_dir
-        self._t0 = time.monotonic()
         self.state: FloorState = initial_state(persona.name, persona.aliases)
         self._memory = MeetingMemory()
         self._summary = ""
@@ -79,7 +77,8 @@ class Roundtable:
     # --- clock and state ------------------------------------------------------
 
     def now_ms(self) -> int:
-        return int((time.monotonic() - self._t0) * 1000)
+        # One clock for the floor and the event log (the log's t_ms), so recordings can align them.
+        return self._events.now_ms()
 
     def _apply(self, event: object) -> None:
         self.state = apply(self.state, event)

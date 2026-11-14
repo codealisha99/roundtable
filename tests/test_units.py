@@ -207,7 +207,6 @@ def test_token_api_mints_a_join_token_and_validates_input():
     assert client.get("/api/health").json() == {"ok": True}
 
 
-
 def test_token_api_rejects_oversized_bodies():
     client = TestClient(make_app(SETTINGS))
     big = b'{"name": "' + b"x" * 5000 + b'"}'
