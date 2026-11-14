@@ -12,6 +12,11 @@ def pcm16_to_float32(pcm: bytes) -> np.ndarray:
     return np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768.0
 
 
+def pcm_rms(pcm: bytes) -> float:
+    samples = pcm16_to_float32(pcm)
+    return float(np.sqrt(np.mean(np.square(samples)))) if samples.size else 0.0
+
+
 def pcm_duration_ms(pcm: bytes, sample_rate: int) -> int:
     return int(len(pcm) / 2 * 1000 / sample_rate)
 

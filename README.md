@@ -66,7 +66,7 @@ Prerequisites: macOS (uses `say` for the simulated speakers), Docker, uv (Python
 
 ```bash
 make install          # uv sync + pnpm install
-make test             # 45 unit tests: floor timelines, meeting memory, prompts, token API
+make test             # 59 unit tests: floor timelines, meeting memory, echo guard, prompts, token API
 make demo             # keyless end-to-end run, two scenarios; prints transcript, decisions, checks
 make replay           # after demo: publish the recorded run into site/replay (MP3 + timeline)
 ```
@@ -109,7 +109,7 @@ The keyless demo pins `ROUNDTABLE_LLM=scripted`, `ROUNDTABLE_STT=local`, and `RO
 
 | What | Status |
 | --- | --- |
-| Floor manager, meeting memory, prompt builders, token API (`make test`, 45 tests) | Passing |
+| Floor manager, meeting memory, echo guard, prompt builders, token API (`make test`, 59 tests) | Passing |
 | Keyless end-to-end demo (`make demo`): LiveKit in Docker, two scenarios, 3 and 2 simulated speakers, 27 checks | Passing (17 + 10) |
 | Web client: loads, joins the LiveKit room with a fake microphone, shows the agent panel and the self tile (headless Chromium via Playwright) | Passing (`cd web && pnpm verify`, needs the live stack) |
 | Local providers: faster-whisper, Piper, Silero VAD | Exercised by the demo |
@@ -120,7 +120,8 @@ The keyless demo pins `ROUNDTABLE_LLM=scripted`, `ROUNDTABLE_STT=local`, and `RO
 ## Limitations and next steps
 
 - **Partial transcripts.** STT runs per utterance when VAD closes the segment. Captions appear after the speaker pauses, not word by word. Streaming STT (for example Deepgram live or a rolling whisper window) would tighten captions and let the floor react earlier.
-- **Echo.** If a human's microphone picks up the agent's speech through speakers, the agent can hear itself as a barge-in. Browser echo cancellation helps. Headphones are the reliable answer. Speaker-level echo suppression is not implemented.
+- **Echo, handled: one sound on two tracks.** When a person's speakers leak into their microphone, the same words arrive on two tracks. The agent holds each finished segment for 0.8 s, then keeps one line: the copy that started first, or the louder copy when both start within 0.3 s. It drops a copy of at least three words from another speaker that overlaps in time and is at least 85% similar after speech-to-text. This costs about 0.8 s of latency on every line. Tests: `tests/test_echo.py`. Verified with a live echo of each sim speaker 150 ms late at 40% gain on Jo's track: before, every line appeared twice and the question was answered on both copies; after, one line each, attributed to the original speaker.
+- **Echo, not handled.** (1) Pre-recorded or misaligned input: a copy that starts more than 0.3 s before the original is kept as the speaker, because the agent cannot tell which copy is the original. Live echo always trails its source, so this only happens with a fake or replayed microphone (as in a browser test fed with room audio). (2) Copies whose words differ a lot (noise, accents, another language) are not matched. (3) Two people who really say the same three or more words at the same moment are merged. (4) A copy that ends more than 0.8 s after the original can arrive after the original is released and be kept. (5) The agent's own voice leaking into a human's microphone: the transcript guard does not see it, and barge-in is driven by voice activity on the human's track, so the agent can still stop itself. Headphones or browser echo cancellation are the practical fix. Speaker-level echo suppression is not implemented.
 - **Agent name as a common noun.** A name after a determiner ("the roundtable") no longer addresses the agent unless the line opens with it and a comma follows. A bare mid-sentence use ("I think roundtable is good") still does. Telling those apart needs a model, not a rule.
 - **Speaker identity** is the display name from the token. Two people with the same name would collapse into one speaker.
 - **Heuristics are tuned on one scripted meeting.** Thresholds (700 ms gap, 250 ms barge-in, 1.5 s group-question silence) are reasonable defaults, not measured against real meetings. A labelled meeting corpus would be the next step.

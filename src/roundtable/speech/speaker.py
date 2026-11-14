@@ -9,7 +9,7 @@ from livekit import rtc
 from livekit.agents.vad import VADEventType
 
 from roundtable.floor.model import Activity, Utterance
-from roundtable.speech.audio import pcm_duration_ms
+from roundtable.speech.audio import pcm_duration_ms, pcm_rms
 from roundtable.speech.stt import STT
 
 SAMPLE_RATE = 16000
@@ -69,4 +69,12 @@ async def _transcribe(
     if not text:
         return
     duration = pcm_duration_ms(pcm, SAMPLE_RATE)
-    on_event(Utterance(speaker, text, start_ms, max(end_ms, start_ms + duration)))
+    on_event(
+        Utterance(
+            speaker,
+            text,
+            start_ms,
+            max(end_ms, start_ms + duration),
+            pcm_rms(pcm),
+        )
+    )

@@ -13,6 +13,7 @@ from livekit import rtc
 
 from roundtable import respond
 from roundtable.events import EventLog
+from roundtable.floor import echo
 from roundtable.floor.engine import addressed_line, apply, evaluate, initial_state
 from roundtable.floor.model import (
     Activity,
@@ -62,6 +63,7 @@ class Roundtable:
         self._out_dir = out_dir
         self.state: FloorState = initial_state(persona.name, persona.aliases)
         self._memory = MeetingMemory()
+        self._heard = echo.Heard()
         self._summary = ""
         self._pending: list[Utterance] = []
         self._busy = False
@@ -114,6 +116,7 @@ class Roundtable:
         self._closed.set()
 
     async def _finish(self) -> None:
+        self._release_heard(self.now_ms() + echo.HOLD_MS)  # lines still in the echo hold go to the notes
         markdown = self._memory.to_markdown(f"{self._persona.name}: meeting notes")
         if self._summary:
             markdown += f"\n## Summary\n\n{self._summary}\n"
@@ -149,7 +152,7 @@ class Roundtable:
 
     def _on_speaker_event(self, event: object) -> None:
         if isinstance(event, Utterance):
-            self._on_utterance(event)
+            self._heard = echo.hear(self._heard, event)  # released by the floor loop, after the echo hold
         elif isinstance(event, Activity):
             self._apply(event)
             self._events.emit(
@@ -171,7 +174,7 @@ class Roundtable:
         if len(self._memory.items) > before:
             item = self._memory.items[-1]
             self._events.emit(
-                "memory", kind=item.kind, owner=item.owner, text=item.text
+                "memory", memory_kind=item.kind, owner=item.owner, text=item.text
             )
         self._publish(
             {
@@ -193,10 +196,16 @@ class Roundtable:
 
     # --- floor loop -----------------------------------------------------------
 
+    def _release_heard(self, now: int) -> None:
+        self._heard, lines = echo.release(self._heard, now)
+        for line in lines:
+            self._on_utterance(line)
+
     async def _floor_loop(self) -> None:
         while True:
             await asyncio.sleep(FLOOR_TICK_S)
             now = self.now_ms()
+            self._release_heard(now)
             if self.state.agent_speaking:
                 self._check_barge_in(now)
                 continue

@@ -17,6 +17,7 @@ class Utterance:
     text: str
     start_ms: int
     end_ms: int
+    level: float = 0.0  # RMS loudness of the segment (0..1); picks the copy when echoes start together
 
 
 @dataclass(frozen=True)
