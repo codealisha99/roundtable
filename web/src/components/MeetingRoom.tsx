@@ -36,7 +36,15 @@ export function MeetingRoom({ ticket, onLeave }: Props) {
         </div>
       </header>
       <div className="room__body">
-        <Table participants={room.participants} speakers={room.speakers} agent={room.agent} agentPresent={agentPresent} self={ticket.identity} />
+        <div className="room__stage">
+          <Table participants={room.participants} speakers={room.speakers} agent={room.agent} agentPresent={agentPresent} self={ticket.identity} />
+          <ul className="legend" aria-label="What the table colours mean">
+            <li><span className="legend__swatch legend__swatch--speaking" />speaking</li>
+            <li><span className="legend__swatch legend__swatch--wants" />wants to speak</li>
+            <li><span className="legend__swatch legend__swatch--thinking" />asking the gate</li>
+            <li><span className="legend__swatch legend__swatch--stop" />stopped on barge-in</li>
+          </ul>
+        </div>
         <aside className="room__side">
           <AgentPanel agent={room.agent} agentPresent={agentPresent} />
           <Captions captions={room.captions} />

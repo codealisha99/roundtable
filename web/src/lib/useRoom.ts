@@ -8,11 +8,11 @@ import {
   RoomEvent,
   Track,
 } from "livekit-client";
-import { AGENT_IDENTITY_PREFIX, type AgentMessage, type AgentStatus, type Caption } from "../types";
+import { AGENT_IDENTITY_PREFIX, type AgentMessage, type AgentStatus, type Caption, type Decision } from "../types";
 
 const TOPIC = "roundtable";
 const MAX_CAPTIONS = 40;
-const MAX_HISTORY = 10;
+const MAX_DECISIONS = 40;
 
 export interface RoomState {
   status: "connecting" | "connected" | "failed" | "closed";
@@ -26,7 +26,7 @@ export interface RoomState {
   toggleMic: () => void;
 }
 
-const INITIAL_AGENT: AgentStatus = { label: "listening", reason: "Waiting for the call to start", history: [] };
+const INITIAL_AGENT: AgentStatus = { label: "listening", reason: "Waiting for the call to start", decisions: [] };
 
 export function isAgent(participant: Participant): boolean {
   return participant.identity.startsWith(AGENT_IDENTITY_PREFIX);
@@ -40,11 +40,20 @@ function parseMessage(payload: Uint8Array): AgentMessage | null {
   }
 }
 
+/** Adds a decision only when the state actually changed; the agent repeats its state on every turn. */
+export function nextAgent(prev: AgentStatus, label: AgentStatus["label"], reason: string, at: number, id: number): AgentStatus {
+  const head: Decision | undefined = prev.decisions[0];
+  if (head && head.label === label && head.reason === reason) return { ...prev, label, reason };
+  const decision: Decision = { id, label, reason, at };
+  return { label, reason, decisions: [decision, ...prev.decisions].slice(0, MAX_DECISIONS) };
+}
+
 /** Owns the LiveKit connection: participants, active speakers, captions, agent state and remote audio. */
 export function useRoom(url: string, token: string): RoomState {
   const roomRef = useRef<Room | null>(null);
   const audioEls = useRef<Map<string, HTMLMediaElement>>(new Map());
-  const captionId = useRef(0);
+  const ids = useRef(0);
+  const startedAt = useRef(0);
   const [status, setStatus] = useState<RoomState["status"]>("connecting");
   const [error, setError] = useState<string | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -56,6 +65,8 @@ export function useRoom(url: string, token: string): RoomState {
   useEffect(() => {
     const room = new Room({ adaptiveStream: true, dynacast: true });
     roomRef.current = room;
+    startedAt.current = Date.now();
+    const elapsed = () => (Date.now() - startedAt.current) / 1000;
     const refresh = () => {
       setParticipants([room.localParticipant, ...room.remoteParticipants.values()]);
     };
@@ -75,18 +86,17 @@ export function useRoom(url: string, token: string): RoomState {
       const message = parseMessage(payload);
       if (!message) return;
       if (message.kind === "state") {
-        setAgent((prev) => ({
-          label: message.label,
-          reason: message.reason,
-          history: [message.reason, ...prev.history].slice(0, MAX_HISTORY),
-        }));
-      } else if (message.kind === "caption") {
-        captionId.current += 1;
-        setCaptions((prev) => [...prev, { id: captionId.current, speaker: message.speaker, text: message.text, agent: false }].slice(-MAX_CAPTIONS));
-      } else {
-        captionId.current += 1;
-        setCaptions((prev) => [...prev, { id: captionId.current, speaker: "Roundtable", text: message.text, agent: true }].slice(-MAX_CAPTIONS));
+        ids.current += 1;
+        const id = ids.current;
+        setAgent((prev) => nextAgent(prev, message.label, message.reason, elapsed(), id));
+        return;
       }
+      ids.current += 1;
+      const caption: Caption =
+        message.kind === "caption"
+          ? { id: ids.current, speaker: message.speaker, text: message.text, agent: false, at: elapsed() }
+          : { id: ids.current, speaker: "Roundtable", text: message.text, agent: true, at: elapsed() };
+      setCaptions((prev) => [...prev, caption].slice(-MAX_CAPTIONS));
     };
     const onSpeakers = (list: Participant[]) => setSpeakers(new Set(list.map((p) => p.identity)));
     const onDisconnected = () => setStatus("closed");
@@ -96,6 +106,8 @@ export function useRoom(url: string, token: string): RoomState {
       .on(RoomEvent.ParticipantDisconnected, refresh)
       .on(RoomEvent.TrackSubscribed, onTrack)
       .on(RoomEvent.TrackUnsubscribed, onUntrack)
+      .on(RoomEvent.TrackMuted, refresh)
+      .on(RoomEvent.TrackUnmuted, refresh)
       .on(RoomEvent.DataReceived, onData)
       .on(RoomEvent.ActiveSpeakersChanged, onSpeakers)
       .on(RoomEvent.LocalTrackPublished, refresh)

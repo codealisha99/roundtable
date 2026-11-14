@@ -1,6 +1,7 @@
 import { type Participant } from "livekit-client";
 import { type AgentStatus } from "../types";
 import { isAgent } from "../lib/useRoom";
+import { labelText, speakerColor } from "../lib/present";
 
 interface Props {
   participants: Participant[];
@@ -29,38 +30,34 @@ export function Table({ participants, speakers, agent, agentPresent, self }: Pro
     <section className="table" aria-label="Participants around the table">
       <div className={`orb orb--${agent.label}`} aria-live="polite">
         <span className="orb__core">{agentPresent ? "Roundtable" : "Waiting"}</span>
-        <span className="orb__state">{labelText(agent.label)}</span>
+        <span className="orb__state">{agentPresent ? labelText(agent.label) : "not in the room yet"}</span>
       </div>
       {humans.map((p, index) => {
         const speaking = speakers.has(p.identity) || p.isSpeaking;
+        const muted = !p.isMicrophoneEnabled;
         const name = p.name || p.identity;
+        const isSelf = p.identity === self;
         return (
           <div
             key={p.identity}
-            className={`seat ${speaking ? "seat--speaking" : ""}`}
+            className={`seat ${speaking ? "seat--speaking" : ""} ${isSelf ? "seat--self" : ""}`}
             style={seatPosition(index, humans.length)}
           >
-            <div className="seat__avatar" aria-hidden="true">{initials(name)}</div>
+            <div className="seat__avatar" style={{ background: speakerColor(name) }} aria-hidden="true">
+              {initials(name)}
+              {speaking ? <span className="seat__bars"><i /><i /><i /></span> : null}
+            </div>
             <div className="seat__name">
               {name}
-              {p.identity === self ? <span className="seat__you"> (you)</span> : null}
+              {isSelf ? <span className="seat__you"> (you)</span> : null}
+            </div>
+            <div className="seat__status">
+              {speaking ? <span className="seat__speaking">speaking</span> : null}
+              {muted ? <span className="seat__muted">mic off</span> : null}
             </div>
           </div>
         );
       })}
     </section>
   );
-}
-
-export function labelText(label: AgentStatus["label"]): string {
-  switch (label) {
-    case "listening":
-      return "listening";
-    case "wants_to_speak":
-      return "wants to speak";
-    case "thinking":
-      return "thinking";
-    case "speaking":
-      return "speaking";
-  }
 }
