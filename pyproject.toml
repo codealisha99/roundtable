@@ -1,10 +1,10 @@
 [project]
 name = "roundtable"
 version = "0.1.0"
-description = "Add your description here"
+description = "Voice agent that joins a multi-person LiveKit call and handles multi-party turn-taking"
 readme = "README.md"
 authors = [
-    { name = "codealisha99", email = "187989708+codealisha99@users.noreply.github.com" }
+    { name = "codealisha99" }
 ]
 requires-python = ">=3.12"
 dependencies = [

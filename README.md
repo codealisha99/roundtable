@@ -43,7 +43,7 @@ Each human gets their own audio stream, their own VAD, and their own STT task. T
 ## What's hard, and how it is solved
 
 1. **Floor manager as a pure module.** `src/roundtable/floor/` has no LiveKit imports. `apply(state, event)` is a reducer over immutable events (`Utterance`, `Activity`, `AgentStarted`, `AgentEnded`). `evaluate(state, now)` returns `wait | speak | stop | consult` with a human-readable reason. Those reasons are what the web panel and the event log show, so "why it stayed silent" is never a mystery.
-2. **Addressing without a model in the loop.** Cheap text cues decide most turns: the agent's name or alias, a name at the start of a line (`Dan, can you...`), a question with silence after it, a follow-up in the 20 s after the agent spoke. A name *inside* a sentence does not count ("I think Dan is right" is not addressed to Dan).
+2. **Addressing without a model in the loop.** Cheap text cues decide most turns: the agent's name or alias, a name at the start of a line (`Dan, can you...`), a question with silence after it, a follow-up in the 20 s after the agent spoke. A participant's name inside a sentence does not count ("I think Dan is right" is not addressed to Dan). The agent's own name does count anywhere in a sentence, so a common noun like "roundtable" triggers it (see limitations).
 3. **Gaps are measured, not guessed.** The agent never starts while anyone has VAD open. It waits 700 ms after someone addressing it, 1.5 s after an unanswered group question, and 1.2 s of quiet after any overlap before starting anything.
 4. **Two humans mid-exchange.** Three alternating human turns between two people inside 30 s is a back-and-forth. The agent backs off from unaddressed questions. Addressing it by name still works.
 5. **Barge-in with honest truncation.** Human speech over the agent for 250 ms cancels playback. The agent counts only the audio that actually left the speaker (pushed minus still-queued) and truncates its own transcript line to that share of words. The meeting record shows what was heard, not what was planned.
@@ -56,7 +56,7 @@ Prerequisites: macOS (uses `say` for the simulated speakers), Docker, uv (Python
 
 ```bash
 make install          # uv sync + pnpm install
-make test             # 37 unit tests: floor timelines, meeting memory, prompts, token API
+make test             # 39 unit tests: floor timelines, meeting memory, prompts, token API
 make demo             # keyless end-to-end run; prints the attributed transcript, decisions, checks
 ```
 
@@ -97,7 +97,7 @@ The keyless demo pins `ROUNDTABLE_LLM=scripted`, `ROUNDTABLE_STT=local`, and `RO
 
 | What | Status |
 | --- | --- |
-| Floor manager, meeting memory, prompt builders, token API (`make test`, 37 tests) | Passing |
+| Floor manager, meeting memory, prompt builders, token API (`make test`, 39 tests) | Passing |
 | Keyless end-to-end demo (`make demo`): LiveKit in Docker, agent subprocess, 3 simulated speakers, 17 checks | Passing |
 | Web client: loads, joins the LiveKit room with a fake microphone, shows the agent panel and the self tile (headless Chromium via Playwright) | Passing (`cd web && pnpm verify`, needs the live stack) |
 | Local providers: faster-whisper, Piper, Silero VAD | Exercised by the demo |
@@ -109,6 +109,7 @@ The keyless demo pins `ROUNDTABLE_LLM=scripted`, `ROUNDTABLE_STT=local`, and `RO
 
 - **Partial transcripts.** STT runs per utterance when VAD closes the segment. Captions appear after the speaker pauses, not word by word. Streaming STT (for example Deepgram live or a rolling whisper window) would tighten captions and let the floor react earlier.
 - **Echo.** If a human's microphone picks up the agent's speech through speakers, the agent can hear itself as a barge-in. Browser echo cancellation helps. Headphones are the reliable answer. Speaker-level echo suppression is not implemented.
+- **Agent name as a common noun.** "Let's take it to the roundtable" addresses the agent, because its name and alias match anywhere in a line. Fixing that needs a stricter cue (for example, start-of-line or a following question), which would also miss some real address. Not changed here.
 - **Speaker identity** is the display name from the token. Two people with the same name would collapse into one speaker.
 - **Heuristics are tuned on one scripted meeting.** Thresholds (700 ms gap, 250 ms barge-in, 1.5 s group-question silence) are reasonable defaults, not measured against real meetings. A labelled meeting corpus would be the next step.
 - **Gate cost bound.** The LLM gate runs at most once per 20 s, and only for decision-relevant statements. A smarter gate (embedding-based relevance) would need evaluation data.
