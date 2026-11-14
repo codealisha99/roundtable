@@ -1,5 +1,7 @@
 # Roundtable
 
+[![ci](https://github.com/codealisha99/roundtable/actions/workflows/ci.yml/badge.svg)](https://github.com/codealisha99/roundtable/actions/workflows/ci.yml)
+
 A voice agent that joins a multi-person group call as one participant and behaves like a good meeting attendee. Several humans talk, sometimes over each other. The agent tracks who said what, decides whether a turn is for it, waits for a real gap, speaks when it is asked or has something useful to add, and stops immediately when someone talks over it.
 
 The hard part is multi-party turn-taking, not the 1:1 voice loop. Most voice agents assume one speaker. Here the floor manager is a pure, well-tested state machine over the transcript and per-speaker voice activity. It knows nothing about LiveKit, so every turn-taking rule is checked against scripted timelines.
