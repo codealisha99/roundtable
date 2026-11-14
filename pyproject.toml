@@ -1,0 +1,35 @@
+[project]
+name = "roundtable"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "codealisha99", email = "187989708+codealisha99@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=2.8.0",
+    "faster-whisper>=1.2.1",
+    "httpx>=0.28.1",
+    "huggingface-hub>=2.4.0",
+    "livekit>=1.2.1",
+    "livekit-api>=1.2.3",
+    "livekit-plugins-silero>=1.8.12",
+    "numpy>=2.5.4",
+    "piper-tts>=1.8.0",
+    "starlette>=1.10.0",
+    "uvicorn>=0.54.0",
+]
+
+[project.scripts]
+roundtable = "roundtable.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.10.7,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "ruff>=0.17.5",
+]
